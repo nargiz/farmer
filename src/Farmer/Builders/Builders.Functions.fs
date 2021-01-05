@@ -180,7 +180,7 @@ type FunctionsBuilder() =
           Identity = ManagedIdentity.Empty
           Tags = Map.empty
           ZipDeployPath = None
-          WorkerProcess = None}
+          WorkerProcess = None }
     /// Do not create an automatic storage account; instead, link to a storage account that is created outside of this Functions instance.
     [<CustomOperation "link_to_storage_account">]
     member _.LinkToStorageAccount(state:FunctionsConfig, name) = { state with StorageAccount = managed storageAccounts name }
@@ -212,7 +212,7 @@ type FunctionsBuilder() =
               Identity = state.Identity
               ZipDeployPath = state.ZipDeployPath
               AlwaysOn = state.AlwaysOn 
-              WorkerProcess = state.WorkerProcess}
+              WorkerProcess = state.WorkerProcess }
         member _.Wrap state config =
             { state with
                 AlwaysOn = config.AlwaysOn
@@ -224,6 +224,6 @@ type FunctionsBuilder() =
                 Cors = config.Cors
                 Identity = config.Identity
                 ZipDeployPath = config.ZipDeployPath 
-                WorkerProcess = config.WorkerProcess}
+                WorkerProcess = config.WorkerProcess }
         
 let functions = FunctionsBuilder()
