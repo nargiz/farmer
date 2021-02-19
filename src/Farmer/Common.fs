@@ -1126,7 +1126,7 @@ module Cdn =
     | DynamicSiteAcceleration
 
 module EventGrid =
-    type EventGridEvent = EventGridEvent of string member this.Value = match this with EventGridEvent s -> s
+    [<Struct>] type EventGridEvent<'T> = EventGridEvent of string member this.Value = match this with EventGridEvent s -> s
 
 /// Built in Azure roles (https://docs.microsoft.com/en-us/azure/role-based-access-control/built-in-roles)
 module Dns =
@@ -1162,3 +1162,53 @@ module Subscription =
     /// Gets an ARM expression pointing to the tenant id of the current subscription.
     let TenantId = ArmExpression.create "subscription().tenantid"
 
+namespace Farmer.DiagnosticSettings
+
+open Farmer
+open System
+
+[<AutoOpen>]
+module private Helpers =
+    let (|InBounds|OutOfBounds|) days =
+        if days > 365<Days> then OutOfBounds days
+        elif days < 1<Days> then OutOfBounds days
+        else InBounds days
+
+[<Struct>]
+type LogCategory = LogCategory of string member this.Value = match this with LogCategory v -> v
+
+type RetentionPolicy =
+    { Enabled : bool
+      RetentionPeriod : int<Days> }
+    static member Create (retentionPeriod, ?enabled) =
+        match retentionPeriod with
+        | OutOfBounds days ->
+            failwithf "The retention period must be between 1 and 365 days. It is currently %d." days
+        | InBounds _ ->
+            { Enabled = defaultArg enabled true
+              RetentionPeriod = retentionPeriod }
+
+type MetricSetting =
+    { Category : string
+      TimeGrain : TimeSpan option
+      Enabled : bool
+      RetentionPolicy : RetentionPolicy option }
+    static member Create (category, ?retentionPeriod, ?timeGrain) =
+        { Category = category
+          TimeGrain = timeGrain
+          Enabled = true
+          RetentionPolicy = retentionPeriod |> Option.map (fun days -> RetentionPolicy.Create (days, true)) }
+
+type LogSetting =
+    { Category : LogCategory
+      Enabled : bool
+      RetentionPolicy : RetentionPolicy option }
+    static member Create (category, ?retentionPeriod) =
+        { Category = category
+          Enabled = true
+          RetentionPolicy = retentionPeriod |> Option.map (fun days -> RetentionPolicy.Create (days, true)) }
+    static member Create (category, ?retentionPeriod) =
+        LogSetting.Create(LogCategory category, ?retentionPeriod = retentionPeriod)
+
+/// Represents the kind of destination for log analytics
+type LogAnalyticsDestination = AzureDiagnostics | Dedicated
