@@ -291,13 +291,19 @@ let tests = testList "Web App Tests" [
         Expect.equal w.SiteConfig.Use32BitWorkerProcess (Nullable false) "64 Bit worker process"
     }
 
-    test "Default always on false" {
+    test "Supports always on" {
+        let template = webApp { name "web"; always_on }
+        Expect.equal template.AlwaysOn true "AlwaysOn should be true"
+
         let w:Site = webApp { name "testDefault" } |> getResourceAtIndex 0
         Expect.equal w.SiteConfig.AlwaysOn (Nullable false) "always on should be false by default"
     }
 
-    test "Always on true" {
-        let w:Site = webApp { name "testDefault"; always_on } |> getResourceAtIndex 0
-        Expect.equal w.SiteConfig.AlwaysOn (Nullable true) "always on should be true"
+    test "Supports 32 and 64 bit worker processes" {
+        let site:Site = webApp { worker_process Bitness.Bits32 } |> getResourceAtIndex 0
+        Expect.equal site.SiteConfig.Use32BitWorkerProcess (Nullable true) "Should use 32 bit worker process"
+
+        let site:Site = webApp { worker_process Bitness.Bits64 } |> getResourceAtIndex 0
+        Expect.equal site.SiteConfig.Use32BitWorkerProcess (Nullable false) "Should not use 32 bit worker process"
     }
 ]
