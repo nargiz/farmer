@@ -105,7 +105,7 @@ module Az =
             match parameters with
             | [] -> ""
             | parameters -> sprintf "--parameters %s" (parameters |> List.map(fun (a, b) -> $"%s{a}=%s{b}") |> String.concat " ")
-        az $"""deployment group {deploymentCommand.Description} -g {resourceGroup} -n {deploymentName} --template-file {templateFilename} {parametersArgument}"""
+        az $"""deployment sub {deploymentCommand.Description} -l {location.ArmValue} -n {deploymentName} --template-file {templateFilename} {parametersArgument}"""
     /// Deploys an ARM template to an existing resource group.
     let deploy location deploymentName templateFilename parameters = deployOrValidate Create location deploymentName templateFilename parameters
     /// Validates whether the specified template is syntactically correct and will be accepted by Azure Resource Manager.
