@@ -11,6 +11,8 @@ let config = ResourceType ("Microsoft.Web/sites/config", "2016-08-01")
 let sourceControls = ResourceType ("Microsoft.Web/sites/sourcecontrols", "2019-08-01")
 let staticSites = ResourceType("Microsoft.Web/staticSites", "2019-12-01-preview")
 let siteExtensions = ResourceType("Microsoft.Web/sites/siteextensions", "2020-06-01")
+let certificates = ResourceType("Microsoft.Web/certificates", "2019-08-01")
+let hostNameBindings = ResourceType("Microsoft.Web/sites/hostNameBindings", "2020-09-01")
 
 type ServerFarm =
     { Name : ResourceName
@@ -248,6 +250,55 @@ type StaticSite =
         member this.SecureParameters = [
             this.RepositoryToken
         ]
+
+type SslState = 
+    | Sni of thumbprint:ArmExpression
+    | IpBased
+    | SslDisabled
+
+type HostNameBinding =
+    { Location: Location
+      SiteId: ResourceId
+      DomainName: string
+      SslState: SslState 
+    }
+    member this.ResourceName = this.SiteId.Name/this.DomainName
+    interface IArmResource with
+        member this.ResourceId = hostNameBindings.resourceId this.ResourceName
+        member this.JsonModel =
+            {| hostNameBindings.Create(this.ResourceName, this.Location, [this.SiteId]) with
+                properties =
+                    {| sslState = 
+                            match this.SslState with
+                            | SslDisabled -> "Disabled" 
+                            | IpBased -> "IpBasedEnabled" 
+                            | Sni _ -> "SniEnabled"
+                       thumbprint = 
+                            match this.SslState with 
+                            | Sni x -> x.Eval() 
+                            | _ -> null
+                    |}
+            |} :> _
+
+type Certificate =
+    { Location: Location
+      SiteId: ResourceId
+      ServicePlanId: ResourceId
+      DomainName: string }
+    member this.ResourceName =
+      let (ResourceName name) = this.SiteId.Name
+      ResourceName $"{name}-cert"
+    interface IArmResource with
+        member this.ResourceId = certificates.resourceId this.ResourceName
+        member this.JsonModel =
+            {| certificates.Create(
+                    this.ResourceName,
+                    this.Location, 
+                    [this.SiteId; this.ServicePlanId; hostNameBindings.resourceId(this.SiteId.Name,ResourceName this.DomainName)]) with
+                properties =
+                    {| serverFarmId = this.ServicePlanId.Eval()
+                       canonicalName = this.DomainName |}
+            |} :> _
 
 [<AutoOpen>]
 module SiteExtensions =
