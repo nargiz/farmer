@@ -260,7 +260,6 @@ type HostNameBinding =
     { Location: Location
       SiteId: ResourceId
       DomainName: string
-      SslState: SslState 
     }
     member this.ResourceName = this.SiteId.Name/this.DomainName
     interface IArmResource with
@@ -268,16 +267,7 @@ type HostNameBinding =
         member this.JsonModel =
             {| hostNameBindings.Create(this.ResourceName, this.Location, [this.SiteId]) with
                 properties =
-                    {| sslState = 
-                            match this.SslState with
-                            | SslDisabled -> "Disabled" 
-                            | IpBased -> "IpBasedEnabled" 
-                            | Sni _ -> "SniEnabled"
-                       thumbprint = 
-                            match this.SslState with 
-                            | Sni x -> x.Eval() 
-                            | _ -> null
-                    |}
+                    {| |}
             |} :> _
 
 type Certificate =
@@ -299,6 +289,32 @@ type Certificate =
                     {| serverFarmId = this.ServicePlanId.Eval()
                        canonicalName = this.DomainName |}
             |} :> _
+
+type LinkedDeploy =
+    { Name: ResourceName
+      Location: Location
+      WebAppName: ResourceName
+      DomainName: ResourceName 
+      Certificate: Certificate
+      Tags: Map<string,string>
+      DeploymentMode: Farmer.Arm.ResourceGroup.DeploymentMode
+      DeployingAlongsideResourceGroup: bool }
+       member this.ResourceName = this.Name
+       interface IArmResource with
+           member this.ResourceId = Farmer.Arm.ResourceGroup.resourceGroupDeployments.resourceId this.Name
+           member this.JsonModel = 
+               {| Farmer.Arm.ResourceGroup.resourceGroupDeployments.Create (this.ResourceName, tags=this.Tags) with
+                    properties = 
+                       {| mode = this.DeploymentMode.ArmValue
+                          templateLink = {|  uri = "https://bitbucket.org/PrashantPratap/freesslcert/raw/master/FreeSSLCertNested.json"
+                                             contentVersion = "1.0.0.0"
+                          |}
+                          parameters = {| webAppName = $"[{this.WebAppName.Value}]"
+                                          cusomDomain = $"[{this.DomainName.Value}]" 
+                                          location = $"[{this.Location.ArmValue}]" 
+                                          certificateThumprint =  ArmExpression.reference(certificates, certificates.resourceId this.Certificate.ResourceName).Map(sprintf "%s.Thumbprint").Eval() |}
+                       |}
+               |} :> _
 
 [<AutoOpen>]
 module SiteExtensions =

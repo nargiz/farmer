@@ -3,6 +3,7 @@
 open Farmer
 open Farmer.Builders
 open Farmer.Arm
+open Farmer.Arm.ResourceGroup
 
 let template =
     let myWebApp = webApp {
@@ -16,7 +17,6 @@ let template =
         Location = Location.UKSouth
         SiteId = myWebApp.ResourceId
         DomainName = "devops-test.codat.io"
-        SslState = SslState.SslDisabled
     }
 
     let cert : Arm.Web.Certificate =  {
@@ -26,15 +26,28 @@ let template =
         DomainName = hostNameBinding.DomainName
     }
 
-    let hostNameBinding = { hostNameBinding with 
-            SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint")) }
+    let linkedTemplate : Arm.Web.LinkedDeploy = {
+        Name = ResourceName "linkedTemplate"
+        Location = Location.UKSouth
+        Tags = Map<string,string>["testdeplyoyment", "abdulcodattest"]
+        WebAppName = myWebApp.Name
+        DomainName = ResourceName hostNameBinding.DomainName
+        Certificate = cert
+        DeploymentMode =  DeploymentMode.Incremental
+        DeployingAlongsideResourceGroup = true
+    }
+
+    //let hostNameBinding = { hostNameBinding with 
+    //                        SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint")) }
+    
     
 
     arm {
         location Location.UKSouth
         add_resource myWebApp
         add_resource hostNameBinding
-        //add_resource cert
+        add_resource cert
+        add_resource linkedTemplate
     }
 
 template
