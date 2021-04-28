@@ -293,8 +293,8 @@ type Certificate =
 type LinkedDeploy =
     { Name: ResourceName
       Location: Location
-      WebAppName: ResourceName
-      DomainName: ResourceName 
+      WebAppName: string
+      DomainName: string 
       Certificate: Certificate
       Tags: Map<string,string>
       DeploymentMode: Farmer.Arm.ResourceGroup.DeploymentMode
@@ -309,10 +309,10 @@ type LinkedDeploy =
                           templateLink = {|  uri = "https://bitbucket.org/PrashantPratap/freesslcert/raw/master/FreeSSLCertNested.json"
                                              contentVersion = "1.0.0.0"
                           |}
-                          parameters = {| webAppName = $"[{this.WebAppName.Value}]"
-                                          cusomDomain = $"[{this.DomainName.Value}]" 
-                                          location = $"[{this.Location.ArmValue}]" 
-                                          certificateThumprint =  ArmExpression.reference(certificates, certificates.resourceId this.Certificate.ResourceName).Map(sprintf "%s.Thumbprint").Eval() |}
+                          parameters = {| webAppName = {| value = string this.WebAppName |}
+                                          cusomDomain = {| value = string this.DomainName |}
+                                          location = {| value = string this.Location.ArmValue |}
+                                          certificateThumprint = {| value = ArmExpression.reference(certificates, certificates.resourceId this.Certificate.ResourceName).Map(sprintf "%s.Thumbprint").Eval() |} |}
                        |}
                |} :> _
 
