@@ -253,13 +253,13 @@ type StaticSite =
 
 type SslState = 
     | Sni of thumbprint:ArmExpression
-    | IpBased
     | SslDisabled
 
 type HostNameBinding =
     { Location: Location
       SiteId: ResourceId
       DomainName: string
+      SslState: SslState
     }
     member this.ResourceName = this.SiteId.Name/this.DomainName
     interface IArmResource with
@@ -267,7 +267,11 @@ type HostNameBinding =
         member this.JsonModel =
             {| hostNameBindings.Create(this.ResourceName, this.Location, [this.SiteId]) with
                 properties =
-                    {| |}
+                    match this.SslState with 
+                    | Sni thumbprint -> 
+                        {| sslState = "SniEnabled"
+                           thumbprint = thumbprint |} :> obj
+                    | SslDisabled -> {| |} :> obj
             |} :> _
 
 type Certificate =

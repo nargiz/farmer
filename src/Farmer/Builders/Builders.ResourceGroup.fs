@@ -12,7 +12,8 @@ type ResourceGroupConfig =
       Location : Location 
       Resources : IArmResource list
       Tags: Map<string,string>
-      DeploymentMode: DeploymentMode}
+      DeploymentMode: DeploymentMode
+      Dependencies: ResourceId List }
     member private this.ResourceName = this.Name |> Option.defaultValue (ResourceName "farmer-resource-group")
     member private this.IncludeDeployment = not (this.Resources.IsEmpty && this.Outputs.IsEmpty)
     interface IBuilder with
@@ -26,7 +27,7 @@ type ResourceGroupConfig =
                     Outputs = this.Outputs
                     Tags = this.Tags
                     DeploymentMode = this.DeploymentMode
-                    DeployingAlongsideResourceGroup = false}]
+                    DependsOn = this.Dependencies }]
     interface IParameters with
         member this.SecureParameters =
             let nestedParams = 
@@ -63,7 +64,7 @@ type ResourceGroupConfig =
                           Outputs = this.Outputs
                           Tags = this.Tags
                           DeploymentMode = this.DeploymentMode
-                          DeployingAlongsideResourceGroup = true}
+                          DependsOn = (resourceGroups.resourceId this.ResourceName) :: this.Dependencies }
                 ]|}
         member this.RunPostDeployTasks () =
             this.Resources
@@ -89,11 +90,15 @@ type ResourceGroupBuilder() =
           Resources = List.empty
           Location = Location.WestEurope
           Tags = Map.empty
-          DeploymentMode = DeploymentMode.Incremental}
+          DeploymentMode = DeploymentMode.Incremental
+          Dependencies = List.empty }
 
     /// Sets the name of the resource group
     [<CustomOperation "name">]
     member __.SetName (state, name) : ResourceGroupConfig = { state with Name = ResourceName name |> Some }
+
+    [<CustomOperation "depends_on">]
+    member __.AddDependencies (state, dependencies) : ResourceGroupConfig = { state with Dependencies = List.append state.Dependencies dependencies }
 
     /// Creates an output value that will be returned by the ARM template.
     [<CustomOperation "output">]

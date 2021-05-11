@@ -32,12 +32,8 @@ type ResourceGroupDeployment =
       Outputs: Map<string,string>
       Tags: Map<string,string>
       DeploymentMode: DeploymentMode
-      DeployingAlongsideResourceGroup: bool }
+      DependsOn: ResourceId List }
     member this.ResourceName = this.Name
-    member this.DependsOn = [
-        if this.DeployingAlongsideResourceGroup then
-            ResourceId.create (resourceGroups, this.ResourceGroupName)
-    ]
     interface IArmResource with
         member this.ResourceId = resourceGroupDeployments.resourceId this.Name
         member this.JsonModel = 
