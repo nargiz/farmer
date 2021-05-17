@@ -12,7 +12,7 @@ let sourceControls = ResourceType ("Microsoft.Web/sites/sourcecontrols", "2019-0
 let staticSites = ResourceType("Microsoft.Web/staticSites", "2019-12-01-preview")
 let siteExtensions = ResourceType("Microsoft.Web/sites/siteextensions", "2020-06-01")
 let certificates = ResourceType("Microsoft.Web/certificates", "2019-08-01")
-let hostNameBindings = ResourceType("Microsoft.Web/sites/hostNameBindings", "2020-09-01")
+let hostNameBindings = ResourceType("Microsoft.Web/sites/hostNameBindings", "2020-12-01")
 
 type ServerFarm =
     { Name : ResourceName
@@ -270,7 +270,7 @@ type HostNameBinding =
                     match this.SslState with 
                     | Sni thumbprint -> 
                         {| sslState = "SniEnabled"
-                           thumbprint = thumbprint |} :> obj
+                           thumbprint = thumbprint.Eval() |} :> obj
                     | SslDisabled -> {| |} :> obj
             |} :> _
 
@@ -293,32 +293,6 @@ type Certificate =
                     {| serverFarmId = this.ServicePlanId.Eval()
                        canonicalName = this.DomainName |}
             |} :> _
-
-type LinkedDeploy =
-    { Name: ResourceName
-      Location: Location
-      WebAppName: string
-      DomainName: string 
-      Certificate: Certificate
-      Tags: Map<string,string>
-      DeploymentMode: Farmer.Arm.ResourceGroup.DeploymentMode
-      DeployingAlongsideResourceGroup: bool }
-       member this.ResourceName = this.Name
-       interface IArmResource with
-           member this.ResourceId = Farmer.Arm.ResourceGroup.resourceGroupDeployments.resourceId this.Name
-           member this.JsonModel = 
-               {| Farmer.Arm.ResourceGroup.resourceGroupDeployments.Create (this.ResourceName, tags=this.Tags) with
-                    properties = 
-                       {| mode = this.DeploymentMode.ArmValue
-                          templateLink = {|  uri = "https://bitbucket.org/PrashantPratap/freesslcert/raw/master/FreeSSLCertNested.json"
-                                             contentVersion = "1.0.0.0"
-                          |}
-                          parameters = {| webAppName = {| value = string this.WebAppName |}
-                                          cusomDomain = {| value = string this.DomainName |}
-                                          location = {| value = string this.Location.ArmValue |}
-                                          certificateThumprint = {| value = ArmExpression.reference(certificates, certificates.resourceId this.Certificate.ResourceName).Map(sprintf "%s.Thumbprint").Eval() |} |}
-                       |}
-               |} :> _
 
 [<AutoOpen>]
 module SiteExtensions =
