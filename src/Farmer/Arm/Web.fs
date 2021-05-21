@@ -257,15 +257,26 @@ type SslState =
 
 type HostNameBinding =
     { Location: Location
-      SiteId: ResourceId
+      SiteId: ExternalKind
       DomainName: string
       SslState: SslState
     }
-    member this.ResourceName = this.SiteId.Name/this.DomainName
+    member this.SiteResourceId = 
+        match this.SiteId with 
+        | Managed id -> id.Name
+        | Unmanaged id -> id.Name
+    member this.ResourceName =
+        this.SiteResourceId / this.DomainName
+    member this.Dependencies = 
+        [ match this.SiteId with
+          | Managed resid -> resid
+          | _ -> () ]
+    member this.ResourceId = 
+        hostNameBindings.resourceId (this.SiteResourceId, ResourceName this.DomainName)
     interface IArmResource with
         member this.ResourceId = hostNameBindings.resourceId this.ResourceName
         member this.JsonModel =
-            {| hostNameBindings.Create(this.ResourceName, this.Location, [this.SiteId]) with
+            {| hostNameBindings.Create(this.ResourceName, this.Location, this.Dependencies) with
                 properties =
                     match this.SslState with 
                     | Sni thumbprint -> 
