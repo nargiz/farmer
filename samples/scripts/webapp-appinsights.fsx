@@ -18,44 +18,35 @@ let template =
         Location = Location.UKSouth
         SiteId = myWebApp.ResourceId
         ServicePlanId = myWebApp.ServicePlanId
-        DomainName = string None
+        DomainName = domainName
     }
 
     let hostNameBinding : Arm.Web.HostNameBinding = {
         Location = Location.UKSouth
-        SiteId = Arm.Web.sites.resourceId myWebApp.Name.Value
+        SiteId = Arm.Web.sites.resourceId myWebApp.Name
         DomainName = domainName
-        SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint"))
+        SslState = SslDisabled //SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint"))
     }
-
-
 
     let nested = resourceGroup{
         name "my-resource-group-name"
         location Location.UKSouth
         //depends_on [ Arm.Web.certificates.resourceId hostNameBinding.ResourceName]
-        //depends_on [ Arm.Web.certificates.resourceId cert.ResourceName]
         //depends_on [ Arm.Web.sites.resourceId myWebApp.Name]
-        add_resource myWebApp
-        add_resource cert
-        add_resource hostNameBinding
-        add_resource { cert with DomainName = hostNameBinding.DomainName }
-        //add_resource { cert with DomainName = hostNameBinding.DomainName } 
-        //add_resource {
-        //    hostNameBinding with SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint"))
-        //}
+        depends_on [ Arm.Web.certificates.resourceId cert.ResourceName]
+        add_resource {
+            hostNameBinding with SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint"))
+        }
     }
 
     //let hostNameBinding = { hostNameBinding with 
     //                        SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint")) }
-    
-    
 
     arm {
         location Location.UKSouth
-        //add_resource myWebApp
+        add_resource myWebApp
         //add_resource hostNameBinding
-        //add_resource cert
+        add_resource cert
         add_resource nested
     }
 
