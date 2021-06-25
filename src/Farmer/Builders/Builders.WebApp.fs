@@ -114,7 +114,8 @@ type WebAppConfig =
       SecretStore : SecretStore
       AutomaticLoggingExtension : bool
       SiteExtensions : ExtensionName Set
-      WorkerProcess : Bitness option }
+      WorkerProcess : Bitness option 
+      CustomDomain : CertConfig }
     /// Gets this web app's Server Plan's full resource ID.
     member this.ServicePlanId = this.ServicePlan.resourceId this.Name
     /// Gets the Service Plan name for this web app.
@@ -375,6 +376,58 @@ type WebAppConfig =
                 { Name = ResourceName extension
                   SiteName = this.Name
                   Location = location }
+
+            match this.CustomDomain with
+            | AppServiceCertificate customDomain ->
+                    { Location = Location.UKSouth
+                      SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
+                      DomainName = customDomain
+                      SslState = SslDisabled }
+            | _ ->
+                    ()
+            
+            match this.CustomDomain with
+            | AppServiceCertificate customDomain ->
+                    { Location = Location.UKSouth
+                      SiteId = this.ResourceId
+                      ServicePlanId = this.ServicePlanId
+                      DomainName = customDomain }
+            | (NoCertificate customDomain) ->
+                ()
+
+            match this.CustomDomain with
+            | AppServiceCertificate customDomain ->
+                let hostNameBinding =
+                            { Location = Location.UKSouth
+                              SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
+                              DomainName = customDomain
+                              SslState = SslDisabled }
+                    
+                let cert =
+                        { Location = Location.UKSouth
+                          SiteId = this.ResourceId
+                          ServicePlanId = this.ServicePlanId
+                          DomainName = customDomain }
+                
+
+                let resourceGroupConfigBuilder = { Name = Some (ResourceName customDomain)
+                                                   Location = location
+                                                   Parameters = Set.empty
+                                                   Outputs = Map.empty
+                                                   Tags = Map.empty
+                                                   DeploymentMode = ResourceGroup.DeploymentMode.Incremental
+                                                   Dependencies = [ Arm.Web.certificates.resourceId cert.ResourceName
+                                                                    hostNameBinding.ResourceId ]
+                                                   Resources = [{ hostNameBinding with
+                                                                      SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint"))
+                                                                      SiteId =  match hostNameBinding.SiteId with 
+                                                                                | Managed id -> Unmanaged id
+                                                                                | x -> x }]
+                                                    } :> IBuilder 
+
+                yield! resourceGroupConfigBuilder.BuildResources location
+            | (NoCertificate customDomain) ->
+                ()
         ]
 
 type WebAppBuilder() =
@@ -408,7 +461,8 @@ type WebAppBuilder() =
           SecretStore = AppService
           AutomaticLoggingExtension = true
           SiteExtensions = Set.empty
-          WorkerProcess = None }
+          WorkerProcess = None 
+          CustomDomain = NoCertificate "" }
     member __.Run(state:WebAppConfig) =
         { state with
             SiteExtensions =
@@ -553,6 +607,8 @@ type WebAppBuilder() =
                 ZipDeployPath = config.ZipDeployPath
                 AlwaysOn = config.AlwaysOn
                 WorkerProcess = config.WorkerProcess }
+    [<CustomOperation "custom_domain">]
+    member _.CustomDomain(state:WebAppConfig, customDomain) = { state with CustomDomain = customDomain }
 
 let webApp = WebAppBuilder()
 

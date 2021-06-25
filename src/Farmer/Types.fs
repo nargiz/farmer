@@ -227,6 +227,10 @@ type ExternalKind =
     /// A id of a resource that is created externally from Farmer and already exists in Azure.
     | Unmanaged of ResourceId
 
+type CertConfig =
+    | AppServiceCertificate of string
+    | NoCertificate of string
+
 /// A reference to another Azure resource that may or may not be created by Farmer.
 type ResourceRef<'TConfig> =
     | AutoCreate of AutoCreationKind<'TConfig>
