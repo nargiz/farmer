@@ -410,7 +410,7 @@ type WebAppConfig =
                           DomainName = customDomain }
                 
 
-                let resourceGroupConfigBuilder = { Name = Some (ResourceName customDomain)
+                let resourceGroupConfigBuilder = { Name = Some (ResourceName "my-resource-group-name-2")
                                                    Location = location
                                                    Parameters = Set.empty
                                                    Outputs = Map.empty
