@@ -230,7 +230,8 @@ type WebAppConfig =
       SiteExtensions : ExtensionName Set
       WorkerProcess : Bitness option
       Slots : Map<string,SlotConfig> 
-      PrivateEndpoints: (LinkedResource * string option) Set }
+      PrivateEndpoints: (LinkedResource * string option) Set
+      CustomDomain : CertConfig }
     /// Gets this web app's Server Plan's full resource ID.
     member this.ServicePlanId = this.ServicePlan.resourceId this.Name
     /// Gets the Service Plan name for this web app.
@@ -507,6 +508,58 @@ type WebAppConfig =
                 for (_,slot) in this.Slots |> Map.toSeq do
                     slot.ToArm site
 
+            match this.CustomDomain with
+            | AppServiceCertificate customDomain ->
+                    { Location = Location.UKSouth
+                      SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
+                      DomainName = customDomain
+                      SslState = SslDisabled }
+            | _ ->
+                    ()
+            
+            match this.CustomDomain with
+            | AppServiceCertificate customDomain ->
+                    { Location = Location.UKSouth
+                      SiteId = this.ResourceId
+                      ServicePlanId = this.ServicePlanId
+                      DomainName = customDomain }
+            | (NoCertificate customDomain) ->
+                ()
+
+            match this.CustomDomain with
+            | AppServiceCertificate customDomain ->
+                let hostNameBinding =
+                            { Location = Location.UKSouth
+                              SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
+                              DomainName = customDomain
+                              SslState = SslDisabled }
+                    
+                let cert =
+                        { Location = Location.UKSouth
+                          SiteId = this.ResourceId
+                          ServicePlanId = this.ServicePlanId
+                          DomainName = customDomain }
+                
+
+                let resourceGroupConfigBuilder = { Name = Some "my-resource-group-name-2"
+                                                   Location = location
+                                                   Parameters = Set.empty
+                                                   Outputs = Map.empty
+                                                   Tags = Map.empty
+                                                   Mode = ResourceGroup.DeploymentMode.Incremental
+                                                   Dependencies = Set.ofList [ Arm.Web.certificates.resourceId cert.ResourceName
+                                                                               hostNameBinding.ResourceId ]
+                                                   Resources = [{ hostNameBinding with
+                                                                      SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint"))
+                                                                      SiteId =  match hostNameBinding.SiteId with 
+                                                                                | Managed id -> Unmanaged id
+                                                                                | x -> x }]
+                                                    } :> IBuilder 
+
+                yield! resourceGroupConfigBuilder.BuildResources location
+            | (NoCertificate customDomain) ->
+                ()
+
             yield! (PrivateEndpoint.create location this.ResourceId ["sites"] this.PrivateEndpoints)
         ]
 
@@ -545,7 +598,8 @@ type WebAppBuilder() =
           SiteExtensions = Set.empty
           WorkerProcess = None 
           Slots = Map.empty 
-          PrivateEndpoints = Set.empty}
+          PrivateEndpoints = Set.empty
+          CustomDomain = NoCertificate "" }
     member __.Run(state:WebAppConfig) =
         { state with
             SiteExtensions =
@@ -652,6 +706,8 @@ type WebAppBuilder() =
     interface IServicePlanApp<WebAppConfig> with
         member _.Get state = WebAppConfig.ToCommon state
         member _.Wrap state config = WebAppConfig.FromCommon state config
+    [<CustomOperation "custom_domain">]
+    member _.CustomDomain(state:WebAppConfig, customDomain) = { state with CustomDomain = customDomain }
 
 let webApp = WebAppBuilder()
 
