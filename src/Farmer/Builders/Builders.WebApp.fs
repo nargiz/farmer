@@ -528,20 +528,18 @@ type WebAppConfig =
 
             match this.CustomDomain with
             | AppServiceCertificate customDomain ->
-                let hostNameBinding =
-                            { Location = Location.UKSouth
-                              SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
-                              DomainName = customDomain
-                              SslState = SslDisabled }
+                let hostNameBinding = { Location = Location.UKSouth
+                                        SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
+                                        DomainName = customDomain
+                                        SslState = SslDisabled }
                     
-                let cert =
-                        { Location = Location.UKSouth
-                          SiteId = this.ResourceId
-                          ServicePlanId = this.ServicePlanId
-                          DomainName = customDomain }
+                let cert = { Location = Location.UKSouth
+                             SiteId = this.ResourceId
+                             ServicePlanId = this.ServicePlanId
+                             DomainName = customDomain }
                 
 
-                let resourceGroupConfigBuilder = { Name = Some "my-resource-group-name-2"
+                let resourceGroupConfigBuilder = { Name = Some "my-resource-group-name-2" 
                                                    Location = location
                                                    Parameters = Set.empty
                                                    Outputs = Map.empty
