@@ -507,52 +507,44 @@ type WebAppConfig =
                 { site with AppSettings = Map.empty; ConnectionStrings = Map.empty }
                 for (_,slot) in this.Slots |> Map.toSeq do
                     slot.ToArm site
-
-            match this.CustomDomain with
-            | AppServiceCertificate customDomain ->
-                    { Location = Location.UKSouth
-                      SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
-                      DomainName = customDomain
-                      SslState = SslDisabled }
-            | _ ->
-                    ()
+            let hostNameBinding =
+                match this.CustomDomain with
+                | AppServiceCertificate customDomain ->
+                        Some { Location = Location.UKSouth
+                               SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
+                               DomainName = customDomain
+                               SslState = SslDisabled }
+                | _ ->
+                        None
+            hostNameBinding.Value
             
-            match this.CustomDomain with
-            | AppServiceCertificate customDomain ->
-                    { Location = Location.UKSouth
-                      SiteId = this.ResourceId
-                      ServicePlanId = this.ServicePlanId
-                      DomainName = customDomain }
-            | (NoCertificate customDomain) ->
-                ()
+            let cert =
+                match this.CustomDomain with
+                | AppServiceCertificate customDomain ->
+                        Some { Location = Location.UKSouth
+                               SiteId = this.ResourceId
+                               ServicePlanId = this.ServicePlanId
+                               DomainName = customDomain }
+                | (NoCertificate customDomain) ->
+                        None
+            cert.Value
 
             match this.CustomDomain with
             | AppServiceCertificate customDomain ->
-                let hostNameBinding = { Location = Location.UKSouth
-                                        SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
-                                        DomainName = customDomain
-                                        SslState = SslDisabled }
-                    
-                let cert = { Location = Location.UKSouth
-                             SiteId = this.ResourceId
-                             ServicePlanId = this.ServicePlanId
-                             DomainName = customDomain }
-                
-
-                let resourceGroupConfigBuilder = { Name = Some "my-resource-group-name-2" 
+                let resourceGroupConfigBuilder = { Name = Some "my-resource-group-name-2"
                                                    Location = location
                                                    Parameters = Set.empty
                                                    Outputs = Map.empty
                                                    Tags = Map.empty
                                                    Mode = ResourceGroup.DeploymentMode.Incremental
-                                                   Dependencies = Set.ofList [ Arm.Web.certificates.resourceId cert.ResourceName
-                                                                               hostNameBinding.ResourceId ]
-                                                   Resources = [{ hostNameBinding with
-                                                                      SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.ResourceName).Map(sprintf "%s.Thumbprint"))
-                                                                      SiteId =  match hostNameBinding.SiteId with 
+                                                   Dependencies = Set.ofList [ Arm.Web.certificates.resourceId cert.Value.ResourceName
+                                                                               hostNameBinding.Value.ResourceId ]
+                                                   Resources = [{ hostNameBinding.Value with
+                                                                      SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.Value.ResourceName).Map(sprintf "%s.Thumbprint"))
+                                                                      SiteId =  match hostNameBinding.Value.SiteId with 
                                                                                 | Managed id -> Unmanaged id
                                                                                 | x -> x }]
-                                                    } :> IBuilder 
+                                                    } :> IBuilder
 
                 yield! resourceGroupConfigBuilder.BuildResources location
             | (NoCertificate customDomain) ->
