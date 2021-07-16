@@ -270,6 +270,7 @@ type FunctionsConfig =
                   PythonVersion = None
                   Metadata = []
                   AutoSwapSlotName = None
+                  VNetConnectionName = None
                   ZipDeployPath = this.ZipDeployPath |> Option.map (fun (path, slot) -> path, ZipDeploy.ZipDeployTarget.FunctionApp, slot)
                   AppCommandLine = 
                     match this.PublishAs with

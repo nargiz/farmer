@@ -1,5 +1,7 @@
 Release Notes
 =============
+## 1.6.7
+* WebApp: vnet integration
 
 ## 1.6.6
 * Container Groups: Support for 'depends_on' to add dependencies.

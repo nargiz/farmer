@@ -14,6 +14,7 @@ let sourceControls = ResourceType ("Microsoft.Web/sites/sourcecontrols", "2019-0
 let staticSites = ResourceType("Microsoft.Web/staticSites", "2019-12-01-preview")
 let siteExtensions = ResourceType("Microsoft.Web/sites/siteextensions", "2020-06-01")
 let slots = ResourceType ("Microsoft.Web/sites/slots", "2020-09-01")
+let virtualNetworkConnections = ResourceType ("Microsoft.Web/sites/virtualNetworkConnections","2018-11-01")
 
 type ServerFarm =
     { Name : ResourceName
@@ -143,6 +144,7 @@ module ZipDeploy =
                 packageFilename
             | DeployZip zipFilePath ->
                 zipFilePath
+
 type Site =
     { Type: ResourceType
       Name : ResourceName
@@ -172,6 +174,7 @@ type Site =
       Tags : Map<string, string>
       Metadata : List<string * string>
       AutoSwapSlotName: string option
+      VNetConnectionName: string option
       ZipDeployPath : (string * ZipDeploy.ZipDeployTarget * ZipDeploy.ZipDeploySlot) option }
     interface IParameters with
         member this.SecureParameters =
@@ -244,6 +247,7 @@ type Site =
                                     box {| allowedOrigins = origins
                                            supportCredentials = credentials |> Option.toNullable |})
                             |> Option.toObj
+                           vnetName = this.VNetConnectionName |> Option.defaultValue null
                         |}
                     |}
             |} :> _
@@ -307,3 +311,29 @@ module SiteExtensions =
             member this.ResourceId = siteExtensions.resourceId(this.SiteName/this.Name)
             member this.JsonModel =
                 siteExtensions.Create(this.SiteName/this.Name, this.Location, [ sites.resourceId this.SiteName ]) :> _
+
+type VirtualNetworkConnection = 
+    { Site: LinkedResource
+      Location: Location
+      Kind: string Option
+      CertBlob: string Option
+      Dependencies: ResourceId Set
+      Subnet: LinkedResource
+      DnsServers: System.Net.IPAddress list
+      IsSwiftNetwork: bool }
+    member this.SubnetConnectionName = 
+        (this.Subnet.Name::this.Subnet.ResourceId.Segments)
+        |> List.map (fun x-> x.Value) 
+        |> String.concat "_" 
+    member this.ResourceId = virtualNetworkConnections.resourceId( this.Site.Name / this.SubnetConnectionName)
+    interface IArmResource with
+        member this.ResourceId = this.ResourceId
+        member this.JsonModel = 
+            {| virtualNetworkConnections.Create(this.ResourceId.Name,this.Location, this.Dependencies) with
+                kind = this.Kind |> Option.defaultValue Unchecked.defaultof<_>
+                properties = 
+                    {| vnetResourceId = this.Subnet.ResourceId
+                       certBlob = this.CertBlob |> Option.defaultValue Unchecked.defaultof<_>
+                       dnsServers = match this.DnsServers with |[] -> Unchecked.defaultof<_> | ips -> List.map string ips |> String.concat ","
+                       isSwift = true |}
+            |} :> _

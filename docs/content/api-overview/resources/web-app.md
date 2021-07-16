@@ -54,6 +54,7 @@ The Web App builder is used to create Azure App Service accounts. It abstracts t
 | Web App | add_private_endpoints | Adds private endpoints for this Webapp to the given subnets |
 | Web App | add_slot | Adds a deployment slot to the app |
 | Web App | add_slots | Adds multiple deployment slots to the app |
+| Web App | vnet_integration | Configure this web app to route all out-going traffic through a given virtual network subnet |
 | Service Plan | service_plan_name | Sets the name of the service plan. If not set, uses the name of the web app postfixed with "-plan". |
 | Service Plan | runtime_stack | Sets the runtime stack. |
 | Service Plan | operating_system | Sets the operating system. If Linux, App Insights configuration settings will be omitted as they are not supported by Azure App Service. |

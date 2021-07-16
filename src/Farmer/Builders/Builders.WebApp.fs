@@ -230,6 +230,7 @@ type WebAppConfig =
       SiteExtensions : ExtensionName Set
       WorkerProcess : Bitness option
       Slots : Map<string,SlotConfig>
+      VNetIntegration: LinkedResource Option
       PrivateEndpoints: (LinkedResource * string option) Set }
     /// Gets this web app's Server Plan's full resource ID.
     member this.ServicePlanId = this.ServicePlan.resourceId this.Name
@@ -342,7 +343,18 @@ type WebAppConfig =
                         ] |> Map.ofList
                     ) |> Map.toList)
                 |> Map
-
+            let vnetConnection = 
+                match this.VNetIntegration with
+                | Some subnet ->
+                    { Site =  Managed this.ResourceId
+                      Location = location
+                      Kind = None
+                      CertBlob = None
+                      Dependencies = Set.empty
+                      Subnet = subnet
+                      DnsServers = []
+                      IsSwiftNetwork = true } |> Some
+                | None -> None
             let site = 
                 { Type = Arm.Web.sites
                   Name = this.Name
@@ -448,6 +460,7 @@ type WebAppConfig =
                   AppCommandLine = this.DockerImage |> Option.map snd
                   AutoSwapSlotName = None
                   ZipDeployPath = this.ZipDeployPath |> Option.map (fun (path,slot) -> path, ZipDeploy.ZipDeployTarget.WebApp, slot )
+                  VNetConnectionName = vnetConnection |> Option.map (fun x->x.SubnetConnectionName)
                 }
 
             match keyVault with
@@ -506,6 +519,10 @@ type WebAppConfig =
                 { site with AppSettings = Map.empty; ConnectionStrings = Map.empty }
                 for (_,slot) in this.Slots |> Map.toSeq do
                     slot.ToArm site
+            
+            match vnetConnection with
+            | Some x -> x
+            | _ -> ()
 
             yield! (PrivateEndpoint.create location this.ResourceId ["sites"] this.PrivateEndpoints)
         ]
@@ -545,7 +562,8 @@ type WebAppBuilder() =
           SiteExtensions = Set.empty
           WorkerProcess = None 
           Slots = Map.empty
-          PrivateEndpoints = Set.empty}
+          PrivateEndpoints = Set.empty
+          VNetIntegration = None }
     member __.Run(state:WebAppConfig) =
         { state with
             SiteExtensions =
@@ -645,6 +663,9 @@ type WebAppBuilder() =
     /// Automatically add the ASP.NET Core logging extension.
     [<CustomOperation "automatic_logging_extension">]
     member _.DefaultLogging (state:WebAppConfig, setting) = { state with AutomaticLoggingExtension = setting }
+    /// Integrate this webapp with a given subnet. All out-going network traffic from this web app will be routed via this virtual network
+    [<CustomOperation "vnet_integration">]
+    member _.VNetIntegration (state:WebAppConfig, subnet) = {state with VNetIntegration = subnet }
 
     interface IPrivateEndpoints<WebAppConfig> with member _.Add state endpoints = { state with PrivateEndpoints = state.PrivateEndpoints |> Set.union endpoints}
     interface ITaggable<WebAppConfig> with member _.Add state tags = { state with Tags = state.Tags |> Map.merge tags }
