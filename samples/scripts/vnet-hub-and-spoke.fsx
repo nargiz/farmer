@@ -3,6 +3,7 @@
 open Farmer
 open Farmer.Builders
 open Farmer.Arm.Network
+open Farmer.WebApp
 
 
 let hub =
@@ -32,18 +33,18 @@ let hub =
                                } ]
     }
 
-let gateway =
-    gateway {
-        name "vnet-gateway"
-        vnet hub
-    }
+// let gateway =
+//     gateway {
+//         name "vnet-gateway"
+//         vnet hub
+//     }
 
 let spokes =
-    let hubPeering = vnetPeering{
-        remote_vnet hub
-        transit UseRemoteGateway
-        depends_on gateway
-    }
+    // let hubPeering = vnetPeering{
+    //     remote_vnet hub
+    //     transit UseRemoteGateway
+    //     depends_on gateway
+    // }
     let spoke i vnetName =
         vnet {
             name $"vnet-%s{vnetName}"
@@ -56,13 +57,17 @@ let spokes =
                                                      size 24
                                                  }
                                                  subnetSpec {
-                                                     name "workload"
-                                                     size 18
+                                                     name "endpoints"
+                                                     size 24
                                                      allow_private_endpoints Enabled
+                                                 }
+                                                 subnetSpec {
+                                                     name "serverFarms"
+                                                     size 18
                                                  } ]
                                    } ]
 
-            add_peering hubPeering
+            //add_peering hubPeering
         }
 
     {| BuildAgents = spoke 1 "buildagents"
@@ -93,16 +98,25 @@ let bastion =
 
 // TODO: Azure Firewall, Azure Application Gateway, Route Tables, NSGs
 
+
+let integratedApp  = 
+    webApp{
+        name "codat-RSP-test-app"
+        sku Sku.P1V2
+        vnet_integrate (spokes.InternalServices,"serverFarms")
+        add_private_endpoint (spokes.InternalServices,"endpoints")
+    }
 arm {
     add_resources [ hub
-                    spokes.BuildAgents
-                    spokes.InternalServices
-                    spokes.PublicServices ]
+                    //spokes.BuildAgents
+                    spokes.InternalServices ]
+                    //spokes.PublicServices ]
 
-    add_resources jumpBoxes
+    //add_resources jumpBoxes
 
-    add_resource gateway
+    //add_resource gateway
+    add_resource integratedApp
     //add_resource bastion
 }
-|> Deploy.execute "hub-and-spoke-network" [ "jump-password", INSERT-VM-PASSWORD ]
+|> Deploy.execute "RSP-test-2" [  ]
 //|> Writer.quickWrite "hub-and-spoke"

@@ -395,7 +395,7 @@ type PrivateEndpoint =
     member this.ResourceId = privateEndpoints.resourceId this.Name
     member this.JsonModel =
       let dependencies = 
-        [ match this.Subnet with | Managed x -> x | _ -> ()
+        [ match this.Subnet with | Managed x -> ResourceId.Parent x | _ -> ()
           match this.Resource with | Managed x -> x | _ -> () ]
       {| privateEndpoints.Create(this.Name, this.Location, dependencies) with
           properties =

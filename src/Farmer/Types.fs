@@ -50,6 +50,12 @@ type ResourceId =
         { Type = resourceType; ResourceGroup = group; Subscription = subscription; Name = name; Segments = [] }
     static member create (resourceType:ResourceType, name:ResourceName, [<ParamArray>] resourceSegments:ResourceName []) =
         { Type = resourceType; Name = name; ResourceGroup = None; Subscription = None; Segments = List.ofArray resourceSegments }
+    static member Parent resId =
+        { Type = ResourceType(resId.Type.Type.Substring(0,resId.Type.Type.LastIndexOf '/'), resId.Type.ApiVersion)
+          ResourceGroup = resId.ResourceGroup
+          Subscription = resId.Subscription
+          Name = resId.Name
+          Segments = resId.Segments.[0..resId.Segments.Length-2] }
 
 type ResourceType with
     member this.resourceId name = ResourceId.create (this, name)

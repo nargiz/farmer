@@ -359,3 +359,6 @@ type VNetPeeringSpecBuilder() =
     interface IDependable<VNetPeeringSpec> with member _.Add state resources = {state with DependsOn = state.DependsOn |> Set.union resources}
 
 let vnetPeering = VNetPeeringSpecBuilder ()
+
+type IPrivateEndpoints<'T> with
+    member this.AddPrivateEndpoint(state, (vnet:VirtualNetworkConfig, subnet) ) = this.AddPrivateEndpoint(state, Managed vnet.SubnetIds.[subnet])

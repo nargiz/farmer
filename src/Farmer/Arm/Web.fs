@@ -338,10 +338,19 @@ type VirtualNetworkConnection =
     interface IArmResource with
         member this.ResourceId = this.ResourceId
         member this.JsonModel = 
-            {| virtualNetworkConnections.Create(this.ResourceId.Name,this.Location, this.Dependencies) with
+            let deps = [ 
+                match this.Site with
+                | Managed x -> x
+                | _ -> ()
+                match this.Subnet with
+                | Managed x -> ResourceId.Parent x
+                | _ -> ()
+                yield! this.Dependencies; 
+            ] 
+            {| virtualNetworkConnections.Create(this.ResourceId.Name,this.Location, deps) with
                 kind = this.Kind |> Option.defaultValue Unchecked.defaultof<_>
                 properties = 
-                    {| vnetResourceId = this.Subnet.ResourceId
+                    {| vnetResourceId = this.Subnet.ResourceId.Eval()
                        certBlob = this.CertBlob |> Option.defaultValue null
                        dnsServers = 
                             match this.DnsServers with 

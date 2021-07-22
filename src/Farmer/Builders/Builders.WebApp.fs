@@ -805,3 +805,9 @@ module Extensions =
         /// Disables http for this webapp so that only https is used.
         [<CustomOperation "https_only">]
         member this.HttpsOnly(state:'T) = this.Map state (fun x -> { x with HTTPSOnly = true })
+        /// Routes all out-going traffic from this webapp via the given subnet
+        [<CustomOperation "vnet_integrate">]
+        member this.VNetIntegrate(state:'T, subnet) = this.Map state (fun x -> { x with VNetIntegration = Some subnet})
+        member this.VNetIntegrate(state:'T, subnet) = this.Map state (fun x -> { x with VNetIntegration = Some (Managed subnet)})
+        member this.VNetIntegrate(state:'T, (vnet:VirtualNetworkConfig, subnet)) = this.Map state (fun x -> { x with VNetIntegration = Some (Managed vnet.SubnetIds.[subnet])})
+
