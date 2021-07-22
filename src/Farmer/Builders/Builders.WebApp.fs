@@ -164,6 +164,7 @@ type CommonWebConfig =
       Settings : Map<string, Setting>
       Slots : Map<string,SlotConfig>
       WorkerProcess : Bitness option 
+      VNetIntegration: LinkedResource option
       ZipDeployPath : (string*ZipDeploy.ZipDeploySlot) option }
 
 type WebAppConfig =
@@ -301,6 +302,10 @@ type WebAppConfig =
                     ) |> Map.toList)
                 |> Map
 
+            let vnetConnection = 
+                this.CommonWebConfig.VNetIntegration
+                |> Option.map (VirtualNetworkConnection.createFrom location this.ResourceId)
+
             let site = 
                 { Type = Arm.Web.sites
                   Name = this.Name
@@ -406,6 +411,7 @@ type WebAppConfig =
                   AppCommandLine = this.DockerImage |> Option.map snd
                   AutoSwapSlotName = None
                   ZipDeployPath = this.CommonWebConfig.ZipDeployPath |> Option.map (fun (path,slot) -> path, ZipDeploy.ZipDeployTarget.WebApp, slot )
+                  VNetConnectionName = vnetConnection |> Option.map(fun x->x.SubnetConnectionName)
                 }
 
             match keyVault with
@@ -464,6 +470,10 @@ type WebAppConfig =
                 { site with AppSettings = Map.empty; ConnectionStrings = Map.empty }
                 for (_,slot) in this.CommonWebConfig.Slots |> Map.toSeq do
                     slot.ToArm site
+            
+            match vnetConnection with
+            | Some x -> x
+            | None -> ()
 
             yield! (PrivateEndpoint.create location this.ResourceId ["sites"] this.PrivateEndpoints)
         ]
@@ -484,6 +494,7 @@ type WebAppBuilder() =
               Settings = Map.empty
               Slots = Map.empty
               WorkerProcess = None 
+              VNetIntegration = None
               ZipDeployPath = None }
           Sku = Sku.F1
           WorkerSize = Small

@@ -1,11 +1,11 @@
 Release Notes
 =============
-## vNext
-* Refactored Web App and Functions builders to simplify adding new common properties
-
 ## 1.6.7
+* Refactored Web App and Functions builders to simplify adding new common properties
 * Container Groups: Reference Azure container registry credentials.
 * DNS Zone: Support for adding records to existing zones.
+* WebApp: Added VNet integration
+* Functions: Added VNet integration
 
 ## 1.6.6
 * Azure Firewall: Support for 'link_to_firewall_policy' to link to a builder as well as a resource.

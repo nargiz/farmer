@@ -44,6 +44,7 @@ The Functions builder is used to create Azure Functions accounts. It abstracts t
 | publish_as | Specifies whether to publish function as code or as a docker container. |
 | add_slot | Adds a deployment slot to the app |
 | add_slots | Adds multiple deployment slots to the app |
+| vnet_integrate | Configure this function to route all out-going traffic through a given virtual network subnet |
 
 #### Post-deployment Builder Keywords
 The Functions builder contains special commands that are executed *after* the ARM deployment is completed.

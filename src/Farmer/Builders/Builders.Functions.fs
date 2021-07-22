@@ -165,6 +165,10 @@ type FunctionsConfig =
                     ) |> Map.toList)
                 |> Map
 
+            let vnetConnection = 
+                this.CommonWebConfig.VNetIntegration 
+                |> Option.map (VirtualNetworkConnection.createFrom location this.ResourceId)
+
             let site =
                 { Type = Arm.Web.sites
                   Name = this.Name
@@ -232,7 +236,8 @@ type FunctionsConfig =
                     | DockerContainer { StartupCommand = sc } ->
                         Some sc
                     | _ -> None
-                  WorkerProcess = this.CommonWebConfig.WorkerProcess }
+                  WorkerProcess = this.CommonWebConfig.WorkerProcess
+                  VNetConnectionName = vnetConnection |> Option.map(fun x->x.SubnetConnectionName) }
 
             match this.CommonWebConfig.ServicePlan with
             | DeployableResource this.Name resourceId ->
@@ -282,6 +287,10 @@ type FunctionsConfig =
                 {site with AppSettings = Map.empty}
                 for (_, slot) in this.CommonWebConfig.Slots |> Map.toSeq do
                     slot.ToArm site
+
+            match vnetConnection with
+            | Some x -> x
+            | None -> ()
         ]
 
 type FunctionsBuilder() =
@@ -300,6 +309,7 @@ type FunctionsBuilder() =
               Settings = Map.empty
               Slots = Map.empty 
               WorkerProcess = None
+              VNetIntegration = None
               ZipDeployPath = None }
           StorageAccount = derived (fun config ->
             let storage = config.Name.Map (sprintf "%sstorage") |> sanitiseStorage |> ResourceName
