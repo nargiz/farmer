@@ -245,7 +245,7 @@ type WebAppConfig =
     member this.ResourceId = sites.resourceId this.Name
     interface IBuilder with
         member this.ResourceId = this.ResourceId
-        member this.BuildResources location = [
+        member this.BuildResources resourceLocation = [
             let keyVault, secrets =
                 match this.SecretStore with
                 | KeyVault (DeployableResource (WebAppConfig.ToCommon this) vaultName) ->
@@ -280,7 +280,7 @@ type WebAppConfig =
                                   Enabled = secret.Enabled
                                   ActivationDate = secret.ActivationDate
                                   ExpirationDate = secret.ExpirationDate
-                                  Location = location
+                                  Location = resourceLocation
                                   Dependencies = secret.Dependencies.Add vaultName
                                   Tags = secret.Tags } :> IArmResource
                             | None ->
@@ -347,7 +347,7 @@ type WebAppConfig =
             let site = 
                 { Type = Arm.Web.sites
                   Name = this.Name
-                  Location = location
+                  Location = resourceLocation
                   ServicePlan = this.ServicePlanId
                   HTTPSOnly = this.HTTPSOnly
                   HTTP20Enabled = this.HTTP20Enabled
@@ -454,14 +454,14 @@ type WebAppConfig =
             match keyVault with
             | Some keyVault ->
                 let builder = keyVault :> IBuilder
-                yield! builder.BuildResources location
+                yield! builder.BuildResources resourceLocation
             | None ->
                 ()
 
             match this.SourceControlSettings with
             | Some settings ->
                 { Website = this.Name
-                  Location = location
+                  Location = resourceLocation
                   Repository = settings.Repository
                   Branch = settings.Branch
                   ContinuousIntegration = settings.ContinuousIntegration }
@@ -471,7 +471,7 @@ type WebAppConfig =
             match this.AppInsights with
             | Some (DeployableResource this.Name resourceId) ->
                 { Name = resourceId.Name
-                  Location = location
+                  Location = resourceLocation
                   DisableIpMasking = false
                   SamplingPercentage = 100
                   LinkedWebsite =
@@ -486,7 +486,7 @@ type WebAppConfig =
             match this.ServicePlan with
             | DeployableResource this.Name resourceId ->
                 { Name = resourceId.Name
-                  Location = location
+                  Location = resourceLocation
                   Sku = this.Sku
                   WorkerSize = this.WorkerSize
                   WorkerCount = this.WorkerCount
@@ -499,7 +499,7 @@ type WebAppConfig =
             for (ExtensionName extension) in this.SiteExtensions do
                 { Name = ResourceName extension
                   SiteName = this.Name
-                  Location = location }
+                  Location = resourceLocation }
 
             if Map.isEmpty this.Slots then
                 site
@@ -510,7 +510,7 @@ type WebAppConfig =
             let hostNameBinding =
                 match this.CustomDomain with
                 | AppServiceCertificate customDomain ->
-                        Some { Location = Location.UKSouth
+                        Some { Location = resourceLocation
                                SiteId =  Managed (Arm.Web.sites.resourceId this.Name)
                                DomainName = customDomain
                                SslState = SslDisabled }
@@ -521,7 +521,7 @@ type WebAppConfig =
             let cert =
                 match this.CustomDomain with
                 | AppServiceCertificate customDomain ->
-                        Some { Location = Location.UKSouth
+                        Some { Location = resourceLocation
                                SiteId = this.ResourceId
                                ServicePlanId = this.ServicePlanId
                                DomainName = customDomain }
@@ -531,26 +531,20 @@ type WebAppConfig =
 
             match this.CustomDomain with
             | AppServiceCertificate customDomain ->
-                let resourceGroupConfigBuilder = { Name = Some "my-resource-group-name-2"
-                                                   Location = location
-                                                   Parameters = Set.empty
-                                                   Outputs = Map.empty
-                                                   Tags = Map.empty
-                                                   Mode = ResourceGroup.DeploymentMode.Incremental
-                                                   Dependencies = Set.ofList [ Arm.Web.certificates.resourceId cert.Value.ResourceName
-                                                                               hostNameBinding.Value.ResourceId ]
-                                                   Resources = [{ hostNameBinding.Value with
-                                                                      SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.Value.ResourceName).Map(sprintf "%s.Thumbprint"))
-                                                                      SiteId =  match hostNameBinding.Value.SiteId with 
-                                                                                | Managed id -> Unmanaged id
-                                                                                | x -> x }]
-                                                    } :> IBuilder
-
-                yield! resourceGroupConfigBuilder.BuildResources location
+                yield! (resourceGroup { name "[resourceGroup().name]"
+                                        location resourceLocation
+                                        add_resource { hostNameBinding.Value with
+                                                        SslState = SslState.Sni (ArmExpression.reference(Arm.Web.certificates, Arm.Web.certificates.resourceId cert.Value.ResourceName).Map(sprintf "%s.Thumbprint"))
+                                                        SiteId =  match hostNameBinding.Value.SiteId with 
+                                                                  | Managed id -> Unmanaged id
+                                                                  | x -> x }
+                                        depends_on [ Arm.Web.certificates.resourceId cert.Value.ResourceName
+                                                     hostNameBinding.Value.ResourceId ]
+                } :> IBuilder).BuildResources resourceLocation
             | (NoCertificate customDomain) ->
-                ()
+                    ()
 
-            yield! (PrivateEndpoint.create location this.ResourceId ["sites"] this.PrivateEndpoints)
+            yield! (PrivateEndpoint.create resourceLocation this.ResourceId ["sites"] this.PrivateEndpoints)
         ]
 
 type WebAppBuilder() =
