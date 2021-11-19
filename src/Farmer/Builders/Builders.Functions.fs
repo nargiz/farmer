@@ -171,6 +171,19 @@ type FunctionsConfig =
                         ] |> Map.ofList
                     ) |> Map.toList)
                 |> Map
+                
+            let vnetConnection = 
+                match this.CommonWebConfig.VNetIntegrationSubnetId with
+                | Some subnet ->
+                    { Site =  Managed this.ResourceId
+                      Location = location
+                      Kind = None
+                      CertBlob = None
+                      Dependencies = Set.ofList [this.ResourceId]
+                      Subnet = subnet
+                      DnsServers = []
+                      IsSwiftNetwork = true } |> Some
+                | None -> None
 
             let site =
                 { SiteType = Site this.Name
@@ -240,7 +253,8 @@ type FunctionsConfig =
                         Some sc
                     | _ -> None
                   WorkerProcess = this.CommonWebConfig.WorkerProcess
-                  HealthCheckPath = this.CommonWebConfig.HealthCheckPath }
+                  HealthCheckPath = this.CommonWebConfig.HealthCheckPath
+                  VNetConnectionName = vnetConnection |> Option.map (fun x->x.SubnetConnectionName) }
 
             match this.CommonWebConfig.ServicePlan with
             | DeployableResource this.Name.ResourceName resourceId ->
@@ -310,7 +324,8 @@ type FunctionsBuilder() =
               Slots = Map.empty
               WorkerProcess = None
               ZipDeployPath = None
-              HealthCheckPath = None }
+              HealthCheckPath = None
+              VNetIntegrationSubnetId = None }
           StorageAccount = derived (fun config ->
             let storage = config.Name.ResourceName.Map (sprintf "%sstorage") |> sanitiseStorage |> ResourceName
             storageAccounts.resourceId storage)

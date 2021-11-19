@@ -1,4 +1,4 @@
-#r "nuget:Farmer"
+#r "../../src/Farmer/bin/Debug/netstandard2.0/Farmer.dll"
 
 open Farmer
 open Farmer.Builders
@@ -11,19 +11,17 @@ let myStorage = storageAccount {
 }
 
 let myWebApp = webApp {
-    name "mysuperwebapp"
+    name "rsp-test-app2"
     sku WebApp.Sku.S1
     app_insights_off
-    setting "storage_key" myStorage.Key
+    vnet_integration (Unmanaged { ResourceId.Type = Arm.Network.subnets; ResourceGroup = Some "rsp-test"; Subscription = None; Name = ResourceName "rsp-test-vnet"; Segments = [ResourceName "Default"] })
 }
 
 let deployment = arm {
     location Location.NorthEurope
-    add_resource myStorage
+    //add_resource myStorage
     add_resource myWebApp
-    output "storage_key" myStorage.Key
-    output "web_password" myWebApp.PublishingPassword
 }
 
 deployment
-|> Deploy.execute "my-resource-group-name" Deploy.NoParameters
+|> Deploy.execute "rsp-test2" Deploy.NoParameters

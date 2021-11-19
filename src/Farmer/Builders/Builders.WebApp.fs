@@ -176,7 +176,8 @@ type CommonWebConfig =
       Slots : Map<string,SlotConfig>
       WorkerProcess : Bitness option
       ZipDeployPath : (string*ZipDeploy.ZipDeploySlot) option
-      HealthCheckPath: string option }
+      HealthCheckPath: string option
+      VNetIntegrationSubnetId: LinkedResource option }
 
 type WebAppConfig =
     { CommonWebConfig: CommonWebConfig
@@ -313,7 +314,18 @@ type WebAppConfig =
                         ] |> Map.ofList
                     ) |> Map.toList)
                 |> Map
-
+            let vnetConnection = 
+                match this.CommonWebConfig.VNetIntegrationSubnetId with
+                | Some subnet ->
+                    { Site =  Managed this.ResourceId
+                      Location = location
+                      Kind = None
+                      CertBlob = None
+                      Dependencies = Set.ofList [this.ResourceId]
+                      Subnet = subnet
+                      DnsServers = []
+                      IsSwiftNetwork = true } |> Some
+                | None -> None
             let site =
                 { SiteType = Site this.Name
                   Location = location
@@ -420,7 +432,11 @@ type WebAppConfig =
                   AutoSwapSlotName = None
                   ZipDeployPath = this.CommonWebConfig.ZipDeployPath |> Option.map (fun (path,slot) -> path, ZipDeploy.ZipDeployTarget.WebApp, slot )
                   HealthCheckPath = this.CommonWebConfig.HealthCheckPath
+                  VNetConnectionName = vnetConnection |> Option.map (fun x->x.SubnetConnectionName)
                 }
+            match vnetConnection with
+            | Some vnc -> vnc
+            | None -> ()
 
             match keyVault with
             | Some keyVault ->
@@ -540,7 +556,8 @@ type WebAppBuilder() =
               Slots = Map.empty
               WorkerProcess = None
               ZipDeployPath = None
-              HealthCheckPath = None }
+              HealthCheckPath = None
+              VNetIntegrationSubnetId = None }
           Sku = Sku.F1
           WorkerSize = Small
           WorkerCount = 1
@@ -863,6 +880,11 @@ module Extensions =
         [<CustomOperation "ftp_state">]
         member this.FTPState(state:'T, ftpState:FTPState) = this.Map state (fun x -> { x with FTPState = Some ftpState })
 
-        [<CustomOperation "health_check_path">]
         /// Specifies the path Azure load balancers will ping to check for unhealthy instances.
+        [<CustomOperation "health_check_path">]
         member this.HealthCheckPath(state:'T, healthCheckPath:string) = this.Map state (fun x -> {x with HealthCheckPath = Some(healthCheckPath)})
+
+        /// Integrate this webapp with a given subnet. All out-going network traffic from this web app will be routed via this virtual network
+        [<CustomOperation "vnet_integration">]
+        member this.VNetIntegration (state:'T, subnet) = this.Map state (fun x-> { x with VNetIntegrationSubnetId = subnet })
+        member this.VNetIntegration (state:'T, subnet) = this.Map state (fun x-> { x with VNetIntegrationSubnetId = Some subnet })
