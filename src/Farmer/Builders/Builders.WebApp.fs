@@ -926,8 +926,8 @@ module Extensions =
             { current with Settings = current.Settings.Add(key, LiteralSetting value); SlotSettingNames =current.SlotSettingNames.Add(key) }
             |> this.Wrap state
         [<CustomOperation "slot_settings">]
-            |> List.fold (fun (state:CommonWebConfig) (key, value: string) -> { state with Settings = state.Settings.Add(key, LiteralSetting value); SlotSettingNames = state.SlotSettingNames.Add(key) }) current
-            |> this.Wrap state
+        member this.AddSlotSettings(state:'T, settings: (string*string) list) =
+            let current = this.Get state
             settings
-            |> List.fold (fun (state:CommonWebConfig) (key, value: string) -> { state with Settings = state.Settings.Add(key, LiteralSetting value); SlotSettingNames = List.append state.SlotSettingNames [key] }) current
+            |> List.fold (fun (state:CommonWebConfig) (key, value: string) -> { state with Settings = state.Settings.Add(key, LiteralSetting value); SlotSettingNames = state.SlotSettingNames.Add(key) }) current
             |> this.Wrap state
