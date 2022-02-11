@@ -179,7 +179,7 @@ type CommonWebConfig =
       WorkerProcess : Bitness option
       ZipDeployPath : (string*ZipDeploy.ZipDeploySlot) option
       HealthCheckPath: string option
-      SlotSettingNames: List<string> }
+      SlotSettingNames: string Set }
 
 type WebAppConfig =
     { CommonWebConfig: CommonWebConfig
@@ -202,8 +202,8 @@ type WebAppConfig =
       DockerAcrCredentials : {| RegistryName : string; Password : SecureParameter |} option
       AutomaticLoggingExtension : bool
       SiteExtensions : ExtensionName Set
-      PrivateEndpoints: (LinkedResource * string option) Set 
-      CustomDomain : DomainConfig
+      PrivateEndpoints: (LinkedResource * string option) Set
+      CustomDomains : Map<string,DomainConfig>
       ZoneRedundant : bool option }
     member this.Name = this.CommonWebConfig.Name
     /// Gets this web app's Server Plan's full resource ID.
@@ -374,6 +374,7 @@ type WebAppConfig =
                         | None ->
                             match this.Runtime with
                             | DotNetCore version -> Some $"DOTNETCORE|{version}"
+                            | DotNet version -> Some $"DOTNETCORE|{version}"
                             | Node version -> Some $"NODE|{version}"
                             | Php version -> Some $"PHP|{version}"
                             | Ruby version -> Some $"RUBY|{version}"
@@ -385,7 +386,8 @@ type WebAppConfig =
                   NetFrameworkVersion =
                     match this.Runtime with
                     | AspNet version
-                    | DotNet version ->
+                    | DotNet ("5.0" as version)
+                    | DotNet ("6.0" as version) ->
                         Some $"v{version}"
                     | _ ->
                         None
@@ -483,48 +485,78 @@ type WebAppConfig =
                 { site with AppSettings = None; ConnectionStrings = None } // Don't deploy production slot settings as they could cause an app restart
                 for (_,slot) in this.CommonWebConfig.Slots |> Map.toSeq do
                     slot.ToSite site
+            
+            // Host Name Bindings must be deployed sequentially to avoid an error, as the site cannot be modified concurrently.
+            // To do so we add a dependency to the previous binding.
+            let mutable previousHostNameBinding = None
+            for customDomain in this.CustomDomains |> Map.toSeq |> Seq.map snd do
+                let dependsOn = 
+                    match previousHostNameBinding with 
+                    | Some previous -> Set.singleton previous
+                    | None -> Set.empty
 
-            match this.CustomDomain with
-            | SecureDomain (customDomain, certOptions) ->
                 let hostNameBinding =
                     { Location = location
                       SiteId =  Managed (Arm.Web.sites.resourceId this.Name.ResourceName)
-                      DomainName = customDomain
-                      SslState = SslDisabled } // Initially create non-secure host name binding, we link the certificate in a nested deployment below
-                let cert =
-                    { Location = location
-                      SiteId = this.ResourceId
-                      ServicePlanId = this.ServicePlanId
-                      DomainName = customDomain }
-                hostNameBinding
-                cert
-                let resourceLocation = location
+                      DomainName = customDomain.DomainName
+                      SslState = SslDisabled // Initially create non-secure host name binding, we link the certificate in a nested deployment below if this is a secure domain.
+                      DependsOn = dependsOn }
 
-                // nested deployment to update hostname binding with specified SSL options
-                yield! (resourceGroup { 
-                    name "[resourceGroup().name]"
-                    location resourceLocation
-                    add_resource { hostNameBinding with
-                                    SiteId =
-                                        match hostNameBinding.SiteId with 
-                                        | Managed id -> Unmanaged id
-                                        | x -> x 
-                                    SslState = 
-                                        match certOptions with
-                                        | AppManagedCertificate -> SniBased cert.Thumbprint
-                                        | CustomCertificate thumbprint -> SniBased thumbprint
-                                  }
-                    depends_on [ Arm.Web.certificates.resourceId cert.ResourceName
-                                 hostNameBinding.ResourceId ]
-                } :> IBuilder).BuildResources location
-            | InsecureDomain customDomain -> 
-                { Location = location
-                  SiteId =  Managed (Arm.Web.sites.resourceId this.Name.ResourceName)
-                  DomainName = customDomain
-                  SslState = SslDisabled }
-            | NoDomain -> ()
+                hostNameBinding
+
+                previousHostNameBinding <- Some hostNameBinding.ResourceId
+
+                match customDomain with
+                | SecureDomain (customDomain, certOptions) ->
+                    let cert =
+                        { Location = location
+                          SiteId = Managed this.ResourceId
+                          ServicePlanId = Managed this.ServicePlanId
+                          DomainName = customDomain }
+
+                    // Get the resource group which contains the app service plan
+                    let aspRgName = 
+                      match this.CommonWebConfig.ServicePlan with
+                      | LinkedResource linked -> linked.ResourceId.ResourceGroup
+                      | _ -> None
+                    // Create a nested resource group deployment for the certificate - this isn't strictly necessary when the app & app service plan are in the same resource group
+                    // however, when they are in different resource groups this is required to make the deployment succeed (there is an ARM bug which causes a Not Found / Conflict otherwise)
+                    // To keep the code simple, I opted to always nest the certificate deployment. - TheRSP 2021-12-14
+                    let certRg = resourceGroup { 
+                        name (aspRgName |> Option.defaultValue "[resourceGroup().name]")
+                        add_resource 
+                          { cert with
+                              SiteId = Unmanaged cert.SiteId.ResourceId
+                              ServicePlanId = Unmanaged cert.ServicePlanId.ResourceId }
+                        depends_on cert.SiteId
+                        depends_on hostNameBinding.ResourceId
+                    }
+
+                    yield! ((certRg :> IBuilder).BuildResources location)
+
+                    // Need to rename `location` binding to prevent conflict with `location` operator in resource group
+                    let resourceLocation = location
+                    // nested deployment to update hostname binding with specified SSL options
+                    yield! (resourceGroup { 
+                        name "[resourceGroup().name]"
+                        location resourceLocation
+                        add_resource { hostNameBinding with
+                                        SiteId =
+                                            match hostNameBinding.SiteId with 
+                                            | Managed id -> Unmanaged id
+                                            | x -> x 
+                                        SslState = 
+                                            match certOptions with
+                                            | AppManagedCertificate -> SniBased (cert.GetThumbprintReference aspRgName)
+                                            | CustomCertificate thumbprint -> SniBased thumbprint
+                                        DependsOn = Set.empty // Don't want the dependency in this nested template.
+                                      }
+                        depends_on certRg
+                    } :> IBuilder).BuildResources location
+                | _ -> ()
+                    
             
-            if this.CommonWebConfig.SlotSettingNames <> List.Empty then
+            if this.CommonWebConfig.SlotSettingNames <> Set.empty then
                 {
                     SiteName = this.Name.ResourceName;
                     SlotSettingNames = this.CommonWebConfig.SlotSettingNames;
@@ -552,7 +584,7 @@ type WebAppBuilder() =
               WorkerProcess = None
               ZipDeployPath = None
               HealthCheckPath = None
-              SlotSettingNames = List.empty }
+              SlotSettingNames = Set.empty }
           Sku = Sku.F1
           WorkerSize = Small
           WorkerCount = 1
@@ -573,7 +605,7 @@ type WebAppBuilder() =
           AutomaticLoggingExtension = true
           SiteExtensions = Set.empty
           PrivateEndpoints = Set.empty
-          CustomDomain = NoDomain
+          CustomDomains = Map.empty
           ZoneRedundant = None }
     member _.Run(state:WebAppConfig) =
         if state.Name.ResourceName = ResourceName.Empty then raiseFarmer "No Web App name has been set."
@@ -674,9 +706,13 @@ type WebAppBuilder() =
     member _.DefaultLogging (state:WebAppConfig, setting) = { state with AutomaticLoggingExtension = setting }
     //Add Custom domain to you web app
     [<CustomOperation "custom_domain">]
-    member _.CustomDomain(state:WebAppConfig, domainConfig) = { state with CustomDomain = domainConfig }
-    member _.CustomDomain(state:WebAppConfig, customDomain) = { state with CustomDomain = SecureDomain (customDomain,AppManagedCertificate) }
-    member _.CustomDomain(state:WebAppConfig, (customDomain,thumbprint)) = { state with CustomDomain = SecureDomain (customDomain,CustomCertificate thumbprint) }
+    member _.AddCustomDomain(state:WebAppConfig, domainConfig:DomainConfig) = { state with CustomDomains = state.CustomDomains |> Map.add domainConfig.DomainName domainConfig }
+    member this.AddCustomDomain(state:WebAppConfig, customDomain) = this.AddCustomDomain (state, SecureDomain (customDomain,AppManagedCertificate))
+    member this.AddCustomDomain(state:WebAppConfig, (customDomain,thumbprint)) = this.AddCustomDomain (state, SecureDomain (customDomain,CustomCertificate thumbprint))
+    [<CustomOperation "custom_domains">]
+    member this.AddCustomDomains(state, customDomains:string list) = customDomains |> List.fold (fun state domain -> this.AddCustomDomain(state, domain)) state
+    member this.AddCustomDomains(state, domainConfigs:DomainConfig list) = domainConfigs |> List.fold (fun state domain -> this.AddCustomDomain(state, domain)) state
+    member this.AddCustomDomains(state, customDomainsWithThumprint:(string * ArmExpression) list) = customDomainsWithThumprint |> List.fold (fun state domain -> this.AddCustomDomain(state, domain)) state
     /// Enables the zone redundancy in service plan
     [<CustomOperation "enable_zone_redundant">]
     member this.ZoneRedundant(state:WebAppConfig) = {state with ZoneRedundant = Some true}
@@ -887,11 +923,11 @@ module Extensions =
         [<CustomOperation "slot_setting">]
         member this.AddSlotSetting (state:'T, key, value) =
             let current = this.Get state
-            { current with Settings = current.Settings.Add(key, LiteralSetting value); SlotSettingNames = List.append current.SlotSettingNames [key] }
+            { current with Settings = current.Settings.Add(key, LiteralSetting value); SlotSettingNames =current.SlotSettingNames.Add(key) }
             |> this.Wrap state
         [<CustomOperation "slot_settings">]
-        member this.AddSlotSettings(state:'T, settings: (string*string) list) =
-            let current = this.Get state
+            |> List.fold (fun (state:CommonWebConfig) (key, value: string) -> { state with Settings = state.Settings.Add(key, LiteralSetting value); SlotSettingNames = state.SlotSettingNames.Add(key) }) current
+            |> this.Wrap state
             settings
             |> List.fold (fun (state:CommonWebConfig) (key, value: string) -> { state with Settings = state.Settings.Add(key, LiteralSetting value); SlotSettingNames = List.append state.SlotSettingNames [key] }) current
             |> this.Wrap state
