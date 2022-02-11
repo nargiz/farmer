@@ -1,5 +1,9 @@
 Release Notes
 =============
+
+## vNext
+* ServicePlan/WebApp: Support for enabling ZoneDedundant
+
 ## 1.6.22
 * WebApp/Functions: Support for deployment slot settings with `slot_setting` and `slot_settings`
 

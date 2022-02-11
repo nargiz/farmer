@@ -737,5 +737,12 @@ let tests = testList "Web App Tests" [
           Expect.sequenceEqual appSettingNames  [ "sticky_config" ] "Slot config name should be present in template"
           Expect.sequenceEqual dependencies  [ $"[resourceId('Microsoft.Web/sites', '{webApp.Name.ResourceName.Value}')]"] "Slot config names resource should depend on web site"
 
-      }
+    }
+
+    test "Web App enables zoneRedundant in service plan" {
+        let resources = webApp { name "test"; enable_zone_redundant } |> getResources
+        let sf = resources |> getResource<Web.ServerFarm> |> List.head
+        
+        Expect.equal sf.ZoneRedundant (Some true) "ZoneRedundant should be enabled"
+    }
 ]
