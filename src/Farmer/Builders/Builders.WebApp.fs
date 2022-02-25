@@ -617,6 +617,8 @@ type WebAppBuilder() =
                 // No route registered for '/api/siteextensions/Microsoft.AspNetCore.AzureAppServices.SiteExtension'
                 | { Runtime = Runtime.DotNetCore _; AutomaticLoggingExtension = true ; DockerImage = None } ->
                     state.SiteExtensions.Add WebApp.Extensions.Logging
+                | { AutomaticLoggingExtension = false } ->
+                    state.SiteExtensions.Remove WebApp.Extensions.Logging
                 | _ ->
                     state.SiteExtensions
             DockerImage =
